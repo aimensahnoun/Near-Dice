@@ -56,8 +56,8 @@ A small game where a user can create a room by putting Near tokens into it. A se
  - returns an array of all games
 
 **Example call:** 
-`near view $CONTRACT viewGame --accountId $NEAR_ACCOUNT`
- - 
+`near view $CONTRACT viewAllGames --accountId $NEAR_ACCOUNT`
+ 
 ## reactivateGame 
  - Takes ***_gameId*** as  a parameters
  - The person calling this function must be the owner 
