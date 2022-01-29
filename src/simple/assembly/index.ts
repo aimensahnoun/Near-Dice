@@ -15,6 +15,7 @@ class Game {
   winner: string;
   gameId: u32;
   state: string;
+  winningGuess : u8
   constructor() {
     const random = new RNG<u32>(1, u32.MAX_VALUE);
     this.gameId = random.next();
@@ -24,6 +25,7 @@ class Game {
     this.betAmount = u128.Zero;
     this.winner = "";
     this.state = "CREATED";
+    this.winningGuess = 7
   }
 }
 
@@ -42,12 +44,12 @@ export function initGame(): u32 {
 }
 
 //Joining a room
-export function joinGame(_gameId: u32): string {
+export function joinGame(gameId: u32): string {
   assert(
     Context.attachedDeposit > u128.Zero,
     "You must deposit at least 0.1 NEAR to join a game"
   );
-  const game = gamesMap.getSome(_gameId);
+  const game = gamesMap.getSome(gameId);
   assert(game.state == "CREATED", "It is not possible to join this game");
   game.player = Context.sender;
   game.betAmount = Context.attachedDeposit;
@@ -57,38 +59,43 @@ export function joinGame(_gameId: u32): string {
 }
 
 //Playing a game
-export function playGame(_gameId: u32, _guess: u8): string {
-  assert(_guess > 0 && _guess < 7, "Guess must be between 1 and 6");
+export function playGame(gameId: u32, guess: u8): string {
+  assert(guess > 0 && guess < 7, "Guess must be between 1 and 6");
   const random = new RNG<u8>(1, 7);
   const winningNumber = random.next();
-  const game = gamesMap.getSome(_gameId);
+  const game = gamesMap.getSome(gameId);
 
   //Checking if the game is in the right state to play
   assert(game.player == Context.sender, "You are not the player of this game");
   assert(game.state == "JOINED", "It is not possible to play this game");
 
-  game.winner = winningNumber === _guess ? game.player : game.owner;
+  game.winner = winningNumber === guess ? game.player : game.owner;
   const benificiary = ContractPromiseBatch.create(game.winner);
   benificiary.transfer(u128.add(game.startingBet, game.betAmount));
   game.state = "FINISHED";
   game.betAmount = u128.Zero;
   game.startingBet = u128.Zero;
-  gamesMap.set(game.gameId, game);  
+  game.winningGuess = winningNumber;
+  gamesMap.set(game.gameId, game);
   return `The Dice number is ${winningNumber} and the winner is : ${game.winner}`;
 }
 
 //Deleting a room
-export function deleteGame(_gameId: u32): string {
-  const game = gamesMap.getSome(_gameId);
+export function deleteGame(gameId: u32): string {
+  const game = gamesMap.getSome(gameId);
   assert(game.owner == Context.sender, "Only the owner can delete a game");
-  assert(game.state == "FINISHED", "It is not possible to delete this game");
-  gamesMap.delete(_gameId);
+  assert(game.state != "JOINED", "It is not possible to delete this game");
+  if (game.state == "CREATED") {
+    const benificiary = ContractPromiseBatch.create(game.owner);
+    benificiary.transfer(u128.add(game.startingBet, game.betAmount));
+  }
+  gamesMap.delete(gameId);
   return "Game successfully deleted";
 }
 
 //Fetching a room details
-export function viewGame(_gameId: u32): Game {
-  return gamesMap.getSome(_gameId);
+export function viewGame(gameId: u32): Game {
+  return gamesMap.getSome(gameId);
 }
 
 //Fetching all rooms
@@ -97,16 +104,20 @@ export function viewAllGames(): Array<Game> {
 }
 
 //Reactivating a finished room
-export function reactivateGame(_gameId: u32): string {
-  const game = gamesMap.getSome(_gameId);
+export function reactivateGame(gameId: u32): string {
+  const game = gamesMap.getSome(gameId);
   assert(game.owner == Context.sender, "Only the owner can reactivate a game");
-  assert(game.state == "FINISHED", "It is not possible to reactivate an active game");
+  assert(
+    game.state == "FINISHED",
+    "It is not possible to reactivate an active game"
+  );
   assert(
     Context.attachedDeposit > u128.Zero,
     "You must deposit at least 0.1 NEAR to reactivate a game"
   );
   game.state = "CREATED";
   game.startingBet = Context.attachedDeposit;
+  game.player = "";
   gamesMap.set(game.gameId, game);
   return "Game successfully reactivated";
 }
